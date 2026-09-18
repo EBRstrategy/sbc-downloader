@@ -3,7 +3,8 @@ import re
 import pandas as pd
 import requests
 
-excel_file_path = 'plan_attributes_PUF.xlsx'
+# We will use your CSV file directly
+csv_file_path = 'plan_attributes_PUF.csv'
 output_folder = 'sbc_downloads'
 
 os.makedirs(output_folder, exist_ok=True)
@@ -14,12 +15,10 @@ def clean_filename(name):
 
 
 try:
-  xls = pd.ExcelFile(excel_file_path)
-  print('Available sheets:', xls.sheet_names)
-  df = pd.read_excel(excel_file_path, sheet_name=xls.sheet_names[0])
-  print(f'Successfully loaded {len(df)} rows.')
+  df = pd.read_csv(csv_file_path, low_memory=False)
+  print(f'Successfully loaded {len(df)} rows from CSV.')
 except Exception as e:
-  print(f'Error reading Excel file: {e}')
+  print(f'Error reading CSV: {e}')
   exit()
 
 download_count = 0
@@ -41,14 +40,11 @@ for index, row in df.iterrows():
     if response.status_code == 200:
       with open(file_path, 'wb') as f:
         f.write(response.content)
-      print(f'Successfully downloaded: {file_name}')
+      print(f'Downloaded: {file_name}')
       download_count += 1
     else:
-      print(
-          f'Failed to download {file_name} (Status code:'
-          f' {response.status_code})'
-      )
+      print(f'Failed: {file_name} (Status: {response.status_code})')
   except Exception as e:
-    print(f'Error downloading {file_name}: {e}')
+    print(f'Error on {file_name}: {e}')
 
-print(f'Total files downloaded: {download_count}')
+print(f'Total downloaded: {download_count}')
