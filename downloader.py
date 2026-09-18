@@ -3,48 +3,38 @@ import re
 import pandas as pd
 import requests
 
-# We will use your CSV file directly
-csv_file_path = 'plan_attributes_PUF.csv'
-output_folder = 'sbc_downloads'
+csv_file = 'plan_attributes_PUF.csv'
+output_dir = 'sbc_downloads'
 
-os.makedirs(output_folder, exist_ok=True)
+os.makedirs(output_dir, exist_ok=True)
 
+df = pd.read_csv(csv_file, low_memory=False)
+print(f'Loaded {len(df)} rows from CSV.')
 
-def clean_filename(name):
-  return re.sub(r'[\/*?:"<>|]', '', str(name))
-
-
-try:
-  df = pd.read_csv(csv_file_path, low_memory=False)
-  print(f'Successfully loaded {len(df)} rows from CSV.')
-except Exception as e:
-  print(f'Error reading CSV: {e}')
-  exit()
-
-download_count = 0
-
+count = 0
 for index, row in df.iterrows():
-  plan_name = row.get('PlanMarketingName', f'Plan_{index}')
-  hios_id = row.get('StandardComponentId', '')
   url = row.get('URLForSummaryofBenefitsCoverage')
-
   if pd.isna(url) or not str(url).startswith('http'):
     continue
 
-  safe_name = clean_filename(f'{plan_name}_{hios_id}')
-  file_name = f'{safe_name}.pdf'
-  file_path = os.path.join(output_folder, file_name)
+  plan_name = str(row.get('PlanMarketingName', f'plan_{index}'))
+  plan_id = str(row.get('StandardComponentId', f'{index}'))
+  
+  # Clean filename characters
+  safe_name = re.sub(r'[\/*?:"<>|]', '', f'{plan_name}_{plan_id}')[:150]
+  file_path = os.path.join(output_dir, f'{safe_name}.pdf')
 
   try:
-    response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-    if response.status_code == 200:
+    res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+    if res.status_code == 200:
       with open(file_path, 'wb') as f:
-        f.write(response.content)
-      print(f'Downloaded: {file_name}')
-      download_count += 1
-    else:
-      print(f'Failed: {file_name} (Status: {response.status_code})')
+        f.write(res.content)
+      count += 1
+      print(f'Downloaded {count}: {safe_name}.pdf')
+      
+      # Optional: Remove the # in the next line if you want to test just the first 50 files first
+      # if count >= 50: break 
   except Exception as e:
-    print(f'Error on {file_name}: {e}')
+    print(f'Skipped due to error: {e}')
 
-print(f'Total downloaded: {download_count}')
+print(f'Total downloaded: {count}')
