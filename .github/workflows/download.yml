@@ -21,8 +21,8 @@ jobs:
       - name: Run downloader script
         run: python downloader.py
 
-      - name: Upload downloaded PDFs as a zip
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbc-pdfs
+          name: sbc_downloads
           path: sbc_downloads/
