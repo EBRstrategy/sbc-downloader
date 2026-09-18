@@ -3,9 +3,9 @@ import re
 import pandas as pd
 import requests
 
-# Configuration
-csv_file_path = 'sbc_links.csv'  # Your CSV file with links
-output_folder = 'sbc_downloads'  # Where the PDFs will be temporarily saved
+# Pointing directly to your uploaded Excel file
+excel_file_path = 'plan_attributes_PUF.xlsx'
+output_folder = 'sbc_downloads'
 
 os.makedirs(output_folder, exist_ok=True)
 
@@ -15,23 +15,23 @@ def clean_filename(name):
 
 
 try:
-  df = pd.read_csv(csv_file_path)
-  print(f'Loaded {len(df)} rows from {csv_file_path}.')
-except FileNotFoundError:
-  print(
-      f"Error: Could not find '{csv_file_path}'. Make sure it's uploaded to"
-      ' your repository.'
-  )
+  # Read the Excel file (automatically grabs the first sheet)
+  df = pd.read_excel(excel_file_path)
+  print(f'Loaded {len(df)} rows from {excel_file_path}.')
+except Exception as e:
+  print(f"Error reading Excel file: {e}")
   exit()
 
 for index, row in df.iterrows():
-  plan_identifier = clean_filename(row.get('PlanName', f'Plan_{index}'))
-  url = row.get('URL')
+  plan_name = row.get('PlanMarketingName', f'Plan_{index}')
+  hios_id = row.get('StandardComponentId', '')
+  url = row.get('URLForSummaryofBenefitsCoverage')
 
   if pd.isna(url) or not str(url).startswith('http'):
     continue
 
-  file_name = f'{plan_identifier}.pdf'
+  safe_name = clean_filename(f'{plan_name}_{hios_id}')
+  file_name = f'{safe_name}.pdf'
   file_path = os.path.join(output_folder, file_name)
 
   try:
