@@ -16,13 +16,26 @@ try:
     raise FileNotFoundError(f'Could not find {csv_file} in repository root.')
 
   df = pd.read_csv(csv_file, low_memory=False)
-  print(f'Successfully loaded CSV with {len(df)} rows.')
 
-  # Directly use the exact column name from your dataset
-  url_col = 'URLForSummaryofBenefitsCoverage'
+  # Clean all column names to remove hidden BOM characters, spaces, or carriage returns
+  df.columns = [
+      str(col).strip().replace('\ufeff', '').replace('\r', '')
+      for col in df.columns
+  ]
+  print(f'Successfully loaded CSV. Cleaned columns found.')
 
-  if url_col not in df.columns:
-    raise KeyError(f"Column '{url_col}' not found in CSV columns.")
+  # Find the URL column flexibly
+  url_col = None
+  for col in df.columns:
+    if 'url' in col.lower() and 'benefit' in col.lower():
+      url_col = col
+      break
+
+  if not url_col:
+    raise KeyError(
+        f'Could not find Summary of Benefits URL column. Available columns:'
+        f' {list(df.columns)}'
+    )
 
   print(f'Using URL column: {url_col}')
 
@@ -34,8 +47,22 @@ try:
     if pd.isna(url) or not str(url).strip().startswith('http'):
       continue
 
-    plan_name = str(row.get('PlanMarketingName', f'plan_{index}'))
-    plan_id = str(row.get('StandardComponentId', f'{index}'))
+    # Find plan name and ID columns flexibly
+    plan_name = f'plan_{index}'
+    for col in df.columns:
+      if 'planmarketingname' in col.lower():
+        val = row.get(col)
+        if pd.notna(val):
+          plan_name = str(val)
+        break
+
+    plan_id = str(index)
+    for col in df.columns:
+      if 'standardcomponentid' in col.lower():
+        val = row.get(col)
+        if pd.notna(val):
+          plan_id = str(val)
+        break
 
     safe_name = re.sub(r'[\/*?:"<>|]', '', f'{plan_name}_{plan_id}')[:100]
     file_path = os.path.join(output_dir, f'{safe_name}.pdf')
@@ -57,8 +84,7 @@ try:
     except Exception:
       fail_count += 1
 
-    # Keep the 50-file test limit for now so it runs instantly. 
-    # Change or remove this number later when you want all ~20,000!
+    # Test limit set to 50 files so it finishes instantly
     if success_count >= 50:
       print('Reached initial batch limit of 50 files.')
       break
