@@ -9,20 +9,27 @@ os.makedirs(output_dir, exist_ok=True)
 log_path = os.path.join(output_dir, 'run_log.txt')
 
 try:
-  print('Starting robust CSV parsing...')
+  print('Starting CSV parsing with dynamic header detection...')
   csv_file = 'plan_attributes_PUF.csv'
 
   if not os.path.exists(csv_file):
     raise FileNotFoundError(f'Could not find {csv_file} in repository root.')
 
-  # Try reading with standard comma first, but fallback if it collapses into one column
-  df = pd.read_csv(csv_file, low_memory=False, on_bad_lines='skip')
+  # Automatically find the exact line number where the real headers begin
+  header_row = 0
+  with open(csv_file, 'r', encoding='utf-8', errors='ignore') as f:
+    for idx, line in enumerate(f):
+      if (
+          'StandardComponentId' in line
+          or 'URLForSummaryofBenefitsCoverage' in line
+      ):
+        header_row = idx
+        break
 
-  if len(df.columns) <= 1:
-    # Try semicolon delimiter if comma failed
-    df = pd.read_csv(
-        csv_file, low_memory=False, delimiter=';', on_bad_lines='skip'
-    )
+  print(f'Detected true header row at line index: {header_row}')
+
+  # Read CSV skipping the extra title/metadata lines at the top
+  df = pd.read_csv(csv_file, skiprows=header_row, low_memory=False)
 
   # Clean column names
   df.columns = [
@@ -31,25 +38,15 @@ try:
   ]
   print(f'Successfully loaded CSV. Total columns found: {len(df.columns)}')
 
-  # If it still only has 1 column, print the first few rows to the log so we can see what it looks like
-  if len(df.columns) <= 1:
-    sample_data = df.head(5).to_string()
-    raise ValueError(
-        'CSV is still loading as a single column. Sample content:\n'
-        + sample_data
-    )
+  url_col = 'URLForSummaryofBenefitsCoverage'
+  if url_col not in df.columns:
+    for col in df.columns:
+      if 'url' in col.lower() and 'benefit' in col.lower():
+        url_col = col
+        break
 
-  # Flexible URL column finder
-  url_col = None
-  for col in df.columns:
-    if 'url' in col.lower() and ('benefit' in col.lower() or 'sbc' in col.lower()):
-      url_col = col
-      break
-
-  if not url_col:
-    raise KeyError(
-        f'Could not find URL column. Available columns: {list(df.columns)}'
-    )
+  if url_col not in df.columns:
+    raise KeyError(f"Could not find URL column. Columns found: {list(df.columns)}")
 
   print(f'Using URL column: {url_col}')
 
@@ -61,21 +58,8 @@ try:
     if pd.isna(url) or not str(url).strip().startswith('http'):
       continue
 
-    plan_name = f'plan_{index}'
-    for col in df.columns:
-      if 'planmarketingname' in col.lower() or 'planname' in col.lower():
-        val = row.get(col)
-        if pd.notna(val):
-          plan_name = str(val)
-        break
-
-    plan_id = str(index)
-    for col in df.columns:
-      if 'componentid' in col.lower() or 'planid' in col.lower():
-        val = row.get(col)
-        if pd.notna(val):
-          plan_id = str(val)
-        break
+    plan_name = str(row.get('PlanMarketingName', f'plan_{index}'))
+    plan_id = str(row.get('StandardComponentId', f'{index}'))
 
     safe_name = re.sub(r'[\/*?:"<>|]', '', f'{plan_name}_{plan_id}')[:100]
     file_path = os.path.join(output_dir, f'{safe_name}.pdf')
@@ -97,6 +81,7 @@ try:
     except Exception:
       fail_count += 1
 
+    # Test limit set to 50 files so it runs instantly
     if success_count >= 50:
       print('Reached initial batch limit of 50 files.')
       break
