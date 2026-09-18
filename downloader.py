@@ -9,32 +9,46 @@ os.makedirs(output_dir, exist_ok=True)
 log_path = os.path.join(output_dir, 'run_log.txt')
 
 try:
-  print('Starting SBC download process...')
+  print('Starting robust CSV parsing...')
   csv_file = 'plan_attributes_PUF.csv'
 
   if not os.path.exists(csv_file):
     raise FileNotFoundError(f'Could not find {csv_file} in repository root.')
 
-  df = pd.read_csv(csv_file, low_memory=False)
+  # Try reading with standard comma first, but fallback if it collapses into one column
+  df = pd.read_csv(csv_file, low_memory=False, on_bad_lines='skip')
 
-  # Clean all column names to remove hidden BOM characters, spaces, or carriage returns
+  if len(df.columns) <= 1:
+    # Try semicolon delimiter if comma failed
+    df = pd.read_csv(
+        csv_file, low_memory=False, delimiter=';', on_bad_lines='skip'
+    )
+
+  # Clean column names
   df.columns = [
       str(col).strip().replace('\ufeff', '').replace('\r', '')
       for col in df.columns
   ]
-  print(f'Successfully loaded CSV. Cleaned columns found.')
+  print(f'Successfully loaded CSV. Total columns found: {len(df.columns)}')
 
-  # Find the URL column flexibly
+  # If it still only has 1 column, print the first few rows to the log so we can see what it looks like
+  if len(df.columns) <= 1:
+    sample_data = df.head(5).to_string()
+    raise ValueError(
+        'CSV is still loading as a single column. Sample content:\n'
+        + sample_data
+    )
+
+  # Flexible URL column finder
   url_col = None
   for col in df.columns:
-    if 'url' in col.lower() and 'benefit' in col.lower():
+    if 'url' in col.lower() and ('benefit' in col.lower() or 'sbc' in col.lower()):
       url_col = col
       break
 
   if not url_col:
     raise KeyError(
-        f'Could not find Summary of Benefits URL column. Available columns:'
-        f' {list(df.columns)}'
+        f'Could not find URL column. Available columns: {list(df.columns)}'
     )
 
   print(f'Using URL column: {url_col}')
@@ -47,10 +61,9 @@ try:
     if pd.isna(url) or not str(url).strip().startswith('http'):
       continue
 
-    # Find plan name and ID columns flexibly
     plan_name = f'plan_{index}'
     for col in df.columns:
-      if 'planmarketingname' in col.lower():
+      if 'planmarketingname' in col.lower() or 'planname' in col.lower():
         val = row.get(col)
         if pd.notna(val):
           plan_name = str(val)
@@ -58,7 +71,7 @@ try:
 
     plan_id = str(index)
     for col in df.columns:
-      if 'standardcomponentid' in col.lower():
+      if 'componentid' in col.lower() or 'planid' in col.lower():
         val = row.get(col)
         if pd.notna(val):
           plan_id = str(val)
@@ -84,7 +97,6 @@ try:
     except Exception:
       fail_count += 1
 
-    # Test limit set to 50 files so it finishes instantly
     if success_count >= 50:
       print('Reached initial batch limit of 50 files.')
       break
