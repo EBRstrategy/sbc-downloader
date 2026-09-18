@@ -6,7 +6,6 @@ import requests
 
 output_dir = 'sbc_downloads'
 os.makedirs(output_dir, exist_ok=True)
-
 log_path = os.path.join(output_dir, 'run_log.txt')
 
 try:
@@ -19,15 +18,11 @@ try:
   df = pd.read_csv(csv_file, low_memory=False)
   print(f'Successfully loaded CSV with {len(df)} rows.')
 
-  # Find the URL column dynamically
-  url_col = None
-  for col in df.columns:
-    if 'url' in col.lower() and 'benefit' in col.lower():
-      url_col = col
-      break
+  # Directly use the exact column name from your dataset
+  url_col = 'URLForSummaryofBenefitsCoverage'
 
-  if not url_col:
-    raise KeyError('Could not find Summary of Benefits URL column in CSV.')
+  if url_col not in df.columns:
+    raise KeyError(f"Column '{url_col}' not found in CSV columns.")
 
   print(f'Using URL column: {url_col}')
 
@@ -42,11 +37,9 @@ try:
     plan_name = str(row.get('PlanMarketingName', f'plan_{index}'))
     plan_id = str(row.get('StandardComponentId', f'{index}'))
 
-    # Clean filename characters
     safe_name = re.sub(r'[\/*?:"<>|]', '', f'{plan_name}_{plan_id}')[:100]
     file_path = os.path.join(output_dir, f'{safe_name}.pdf')
 
-    # Skip if already downloaded
     if os.path.exists(file_path):
       success_count += 1
       continue
@@ -64,7 +57,8 @@ try:
     except Exception:
       fail_count += 1
 
-    # Optional: Safety limit for initial testing (remove or increase later if needed)
+    # Keep the 50-file test limit for now so it runs instantly. 
+    # Change or remove this number later when you want all ~20,000!
     if success_count >= 50:
       print('Reached initial batch limit of 50 files.')
       break
@@ -78,7 +72,6 @@ try:
     f.write(msg)
 
 except Exception as e:
-  # Capture any unexpected error so the workflow NEVER fails with exit code 1
   err_msg = f'ERROR ENCOUNTERED:\n{traceback.format_exc()}'
   print(err_msg)
   with open(log_path, 'w') as f:
