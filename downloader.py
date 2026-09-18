@@ -14,14 +14,12 @@ def clean_filename(name):
 
 
 try:
-  # Check sheets and read the first one explicitly
   xls = pd.ExcelFile(excel_file_path)
   print('Available sheets:', xls.sheet_names)
   df = pd.read_excel(excel_file_path, sheet_name=xls.sheet_names[0])
   print(f'Successfully loaded {len(df)} rows.')
-  print('Columns found:', df.columns.tolist()[:10])
 except Exception as e:
-  print(f'Error reading file: {e}')
+  print(f'Error reading Excel file: {e}')
   exit()
 
 download_count = 0
@@ -43,12 +41,14 @@ for index, row in df.iterrows():
     if response.status_code == 200:
       with open(file_path, 'wb') as f:
         f.write(response.content)
-      print(f'Downloaded: {file_name}')
+      print(f'Successfully downloaded: {file_name}')
       download_count += 1
-      # Limit to first 20 for a quick test run if you want, or let it run all
     else:
-      print(f'Failed: {file_name} (Status: {response.status_code})')
+      print(
+          f'Failed to download {file_name} (Status code:'
+          f' {response.status_code})'
+      )
   except Exception as e:
-    print(f'Error on {file_name}: {e}')
+    print(f'Error downloading {file_name}: {e}')
 
-print(f'Total downloaded: {download_count}')
+print(f'Total files downloaded: {download_count}')
